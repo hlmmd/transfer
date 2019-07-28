@@ -1,0 +1,255 @@
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <errno.h>
+#include <arpa/inet.h> //inet_ntoa()
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <sys/param.h>
+#include <sys/select.h>
+#include <assert.h>
+#include <sys/epoll.h>
+#include <sys/stat.h>
+
+#include <event2/event.h>
+
+#include "config.h"
+
+evutil_socket_t create_listener(uint32 ipaddr, uint16 port)
+{
+
+    evutil_socket_t listener;
+    struct sockaddr_in sin;
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = ipaddr;
+    sin.sin_port = htons(port);
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+
+    evutil_make_socket_nonblocking(listener);
+
+    {
+        int one = 1;
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    }
+
+    if (bind(listener, (struct sockaddr *)&sin, sizeof(sin)) < 0)
+    {
+        perror("bind");
+        exit(errno);
+    }
+
+    if (listen(listener, 16) < 0)
+    {
+        perror("listen");
+        exit(errno);
+    }
+
+    return listener;
+}
+
+void free_transfer_user(struct transfer_user *state)
+{
+    event_free(state->read_event);
+    event_free(state->write_event);
+    free(state);
+    state = NULL;
+}
+
+//循环读，直到读到指定长度，如果失败返回-1
+int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned char *buffer, uint16 recvsize)
+{
+    uint16 tempsize = 0;
+    int result = 0;
+    while (tempsize < recvsize)
+    {
+        result = recv(fd, buffer + tempsize, recvsize - tempsize, 0);
+        if (result <= 0)
+            break;
+        tempsize += result;
+    }
+
+    if (tempsize >= recvsize || (result < 0 && errno == EAGAIN))
+        return recvsize;
+
+    //client 断开连接或 recv出错
+    user->cfg->client_nums--;
+    printf("%d\n", user->cfg->client_nums);
+    event_del(user->read_event);
+
+    free_transfer_user(user);
+    return -1;
+}
+
+void transfer_read(evutil_socket_t fd, short events, void *arg)
+{
+    struct transfer_user *user = (struct transfer_user *)arg;
+    unsigned char header_buffer[BUFFER_SIZE + HEAD_SIZE];
+    memset(header_buffer, 0, sizeof(header_buffer));
+
+    //接收报文头
+    int ret = 0;
+    ret += transfer_read_size(user, fd, header_buffer, HEAD_SIZE);
+    if (ret == -1)
+        return;
+
+    // for (int i = 0; i < 4; i++)
+    //     printf("%x\n", header_buffer[i]);
+
+    uint16 datalength = (header_buffer[2] << 8) + header_buffer[3];
+
+    ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
+
+    //传输文件开始。发送文件名和文件大小
+    if (header_buffer[0] == UPLOAD_CTOS_START)
+    {
+        struct fileinfo *finfo = (struct fileinfo *)(header_buffer + HEAD_SIZE);
+        printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
+    }
+
+    printf("aaa%d\n", datalength);
+
+    // int i;
+    // uint32 recvsize = 0;
+    // ssize_t result;
+    // while (1)
+    // {
+    //     assert(user->write_event);
+    //     result = recv(fd, header_buffer, HEAD_SIZE, 0);
+    //     if (result <= 0)
+    //         break;
+    //     printf("%ld\n", result);
+
+    //     uint16 nextlength = header_buffer[2] << 8 + header_buffer[3];
+    //     result = recv(fd, header_buffer, HEAD_SIZE, 0);
+    //     if (result <= 0)
+    //         break;
+    //     printf("%ld\n", result);
+    // }
+
+    // //当前数据已接收完。
+    // if (result < 0 && errno == EAGAIN)
+    //     return;
+
+    // //client 断开连接或 recv出错
+    // user->cfg->client_nums--;
+    // printf("%d\n", user->cfg->client_nums);
+    // event_del(user->read_event);
+
+    // free_transfer_user(user);
+}
+
+void transfer_write(evutil_socket_t fd, short events, void *arg)
+{
+    // struct fd_state *state = (struct fd_state *)arg;
+
+    // while (state->n_written < state->write_upto)
+    // {
+    //     ssize_t result = send(fd, state->buffer + state->n_written,
+    //                           state->write_upto - state->n_written, 0);
+    //     if (result < 0)
+    //     {
+    //         if (errno == EAGAIN) // XXX use evutil macro
+    //             return;
+    //         free_fd_state(state);
+    //         return;
+    //     }
+    //     assert(result != 0);
+
+    //     state->n_written += result;
+    // }
+
+    // if (state->n_written == state->buffer_used)
+    //     state->n_written = state->write_upto = state->buffer_used = 1;
+
+    // event_del(state->write_event);
+}
+
+struct transfer_user *
+alloc_transfer_user(struct transfer_config *cfg, evutil_socket_t fd)
+{
+    struct event_base *base = cfg->base;
+
+    struct transfer_user *user = (struct transfer_user *)malloc(sizeof(struct transfer_user));
+
+    if (!user)
+        return NULL;
+
+    user->cfg = cfg;
+
+    user->read_event = event_new(base, fd, EV_READ | EV_PERSIST, transfer_read, user);
+    if (!user->read_event)
+    {
+        free(user);
+        user = NULL;
+        return NULL;
+    }
+    user->write_event = event_new(base, fd, EV_WRITE | EV_PERSIST, transfer_write, user);
+
+    if (!user->write_event)
+    {
+        event_free(user->read_event);
+        free(user);
+        user = NULL;
+        return NULL;
+    }
+
+    user->buffer_used = user->n_written = user->write_upto = 0;
+
+    assert(user->write_event);
+    return user;
+}
+
+void transfer_accept(evutil_socket_t listener, short event, void *arg)
+{
+
+    struct transfer_config *cfg = (struct transfer_config *)arg;
+    struct sockaddr_storage ss;
+    socklen_t slen = sizeof(ss);
+    int fd = accept(listener, (struct sockaddr *)&ss, &slen);
+    if (fd < 0)
+    { // XXXX eagain??
+        perror("accept");
+    }
+    else
+    {
+        cfg->client_nums++;
+        printf("%d\n", cfg->client_nums);
+        struct transfer_user *user;
+        evutil_make_socket_nonblocking(fd);
+        user = alloc_transfer_user(cfg, fd);
+        assert(user); /*XXX err*/
+        assert(user->write_event);
+        event_add(user->read_event, NULL);
+    }
+}
+
+int transfer_loop(struct transfer_config *cfg)
+{
+
+    evutil_socket_t listener = create_listener(cfg->ip_addr, cfg->port);
+
+    assert(listener >= 0);
+    struct event_base *base;
+    struct event *listener_event;
+
+    base = event_base_new();
+
+    if (!base)
+        return -1; /*XXXerr*/
+
+    cfg->base = base;
+
+    listener_event = event_new(base, listener, EV_READ | EV_PERSIST, transfer_accept, (void *)cfg);
+    /*XXX check it */
+    event_add(listener_event, NULL);
+
+    event_base_dispatch(base);
+}
