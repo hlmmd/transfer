@@ -18,9 +18,19 @@
 #include <sys/stat.h>
 
 #include "utils.h"
+#include "config.h"
+#include "transfer.h"
 
 int main()
 {
+
+    struct transfer_config *cfg = (struct transfer_config *)malloc(sizeof(struct transfer_config));
+
+    cfg->client_nums = 0;
+    cfg->ip_addr = 0;
+    cfg->port = 6000;
+
+    transfer_loop(cfg);
 
     //设置为守护进程
     //daemonize();

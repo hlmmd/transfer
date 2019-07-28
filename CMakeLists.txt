@@ -42,11 +42,13 @@ aux_source_directory(client SRC_LIST_C  )
 # 设置可执行文件
 add_executable(transfer_client ${SRC_LIST_C}  ${COMMON_LIST})
 
+add_executable(client client_epoll.cpp)
+
 #测试hashmap的程序，不能直接用cmake编译，（如何同时编译C和C++ 程序？？）
 #add_executable(hashmap testhashmap.cpp src/hashmap.c)
 
 # 为可执行文件添加链接库文件
-#target_link_libraries (transfer levent)
+target_link_libraries (transfer_server event)
 
 #安装二进制文件
 #install(TARGETS transfer DESTINATION bin)

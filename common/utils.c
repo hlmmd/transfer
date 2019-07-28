@@ -24,6 +24,8 @@
 #include <sys/epoll.h>
 #include "utils.h"
 
+#include "config.h"
+
 int open_only_once()
 {
     const char filename[] = "/tmp/naiveproxy.pid";
@@ -118,4 +120,21 @@ int daemonize()
     //忽略SIGCHLD信号，防止产生僵尸进程
     signal(SIGCHLD, SIG_IGN);
     return 1;
+}
+
+int setnonblocking(int fd)
+{
+    int old_opt = fcntl(fd, F_GETFL);
+    int new_opt = old_opt | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_opt);
+    return old_opt;
+}
+
+int form_header(char *head, unsigned char type, uint16 length)
+{
+    length -= HEAD_SIZE;
+    head[0] = type;
+    head[2] = length >> 8;
+    head[3] = length;
+    return 0;
 }
