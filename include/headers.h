@@ -6,21 +6,26 @@
 
 #define BUFFER_SIZE 4096
 
+
+
 /* 上传 client -> server 请求报文头 */
 
 //开始上传一个文件，后接文件名。
 #define UPLOAD_CTOS_START 0x20
 
 //上传一个块
-#define UPLOAD_CTOS_ONECHUNK 0x21
+#define UPLOAD_CTOS_ONEPKT 0x21
 
 //上传最后一个块
-#define UPLOAD_CTOS_LASTCHUNK 0x22
+#define UPLOAD_CTOS_LASTPKT 0x22
 
 /* 上传 server -> client 响应报文头 */
 
 //请求文件块序号
 #define UPLOAD_STOC_CHUNKNUM 0x30
+
+//请求client传输的一下个pkt序号
+#define UPLOAD_STOC_NEXTPKTNUM 0x31
 
 //回传收到的文件校验和
 #define UPLOAD_STOC_FILECHECKSUM 0x32

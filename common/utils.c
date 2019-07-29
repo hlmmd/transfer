@@ -138,3 +138,10 @@ int form_header(char *head, unsigned char type, uint16 length)
     head[3] = length;
     return 0;
 }
+
+void printf_debug(unsigned char *str, uint32 length)
+{
+    for (int i = 0; i < length; i++)
+        printf("%02x ", str[i]);
+    printf("\n");
+}

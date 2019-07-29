@@ -22,6 +22,47 @@
 #include "utils.h"
 #include "config.h"
 
+int select_recv(int sockfd, char *buffer, int recvsize)
+{
+    fd_set rfds;
+    int maxfd = sockfd;
+    int ret = 0;
+    while (1)
+    {
+        FD_ZERO(&rfds);
+        FD_SET(sockfd, &rfds);
+        //select
+        ret = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+        if (ret == -1)
+        {
+            printf("select error\n");
+            break;
+        }
+        else if (ret == 0)
+            continue;
+        else
+        {
+            bzero(buffer, HEAD_SIZE);
+            int len = recv(sockfd, buffer, HEAD_SIZE, 0);
+            if (len > 0)
+                return recvsize;
+            else if (len < 0)
+                printf("receive failed!\n");
+            else
+            {
+                printf("server down\n");
+                break;
+            }
+        }
+    }
+}
+
+int readfile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buffer, int readsize)
+{
+    lseek(filefd, chunk_num * CHUNK_SIZE + pkt_num * BUFFER_SIZE, SEEK_SET);
+    return read(filefd, buffer, readsize);
+}
+
 int main(int argc, char **argv)
 {
 
@@ -69,12 +110,15 @@ int main(int argc, char **argv)
     unsigned char header_buffer[HEAD_SIZE + BUFFER_SIZE];
 
     char *filename = "/home/qinrui/Github/linux-master.zip";
+    //char *filename = "/home/qinrui/Github/LICENSE";
     int fd = 0;
     if ((fd = open(filename, O_RDONLY)) == -1)
     {
         printf("open erro ！\n");
         exit(-1);
     }
+
+    memset(header_buffer, 0, HEAD_SIZE + BUFFER_SIZE);
 
     /*发送文件信息*/
     struct stat filestat;
@@ -83,27 +127,78 @@ int main(int argc, char **argv)
     struct fileinfo *finfo = (struct fileinfo *)(header_buffer + HEAD_SIZE);
 
     char *bname = basename(filename);
-    printf("%s\n", bname);
-
     int namelength = strlen(bname);
-
+    //设置文件大小和文件名
     finfo->filesize = filestat.st_size;
-    printf("%lld", finfo->filesize);
+
     memcpy(finfo->filename, bname, namelength);
+
+    finfo->chunknum = (int)(finfo->filesize / CHUNK_SIZE) + 1;
+
+    int last_pkt = finfo->filesize % CHUNK_SIZE / BUFFER_SIZE + 1;
 
     usleep(500);
 
     //发送文件名
     if (1)
     {
-        memset(header_buffer, 0, HEAD_SIZE + BUFFER_SIZE);
-        uint16 sendsize = HEAD_SIZE + namelength + sizeof(uint64);
 
-        printf("%d\n", sendsize);
+        uint16 sendsize = HEAD_SIZE + namelength + sizeof(uint64);
 
         form_header(header_buffer, UPLOAD_CTOS_START, sendsize);
         send(sockfd, header_buffer, sendsize, 0);
     }
+
+    uint16 send_checkun_num = 0;
+    uint16 send_pkt_num = 0;
+    uint64 totalsendsize = 0;
+    while (1)
+    {
+
+        unsigned char recv_header[HEAD_SIZE];
+        select_recv(sockfd, recv_header, HEAD_SIZE);
+        int send_pkt_size = 0;
+        if (recv_header[0] == UPLOAD_STOC_CHUNKNUM)
+        {
+            header_buffer[0] = UPLOAD_CTOS_ONEPKT;
+            send_pkt_num = 0;
+            send_checkun_num = (recv_header[2] << 8) + recv_header[3];
+
+            //printf_debug(header_buffer+)
+
+            //    printf("ccc %d\n", send_checkun_num);
+            send_pkt_size = readfile_onepkt(fd, send_checkun_num, send_pkt_num, header_buffer + HEAD_SIZE, BUFFER_SIZE);
+        }
+        else if (recv_header[0] == UPLOAD_STOC_NEXTPKTNUM)
+        {
+            header_buffer[0] = UPLOAD_CTOS_ONEPKT;
+            //send_pkt_num = *((uint16 *)(recv_header + 2));
+            send_pkt_num = (recv_header[2] << 8) + recv_header[3];
+            // printf("ppp %d\n", send_pkt_num);
+            send_pkt_size = readfile_onepkt(fd, send_checkun_num, send_pkt_num, header_buffer + HEAD_SIZE, BUFFER_SIZE);
+        }
+
+        header_buffer[2] = send_pkt_size >> 8;
+        header_buffer[3] = send_pkt_size;
+        totalsendsize += send_pkt_size;
+
+        if (send_pkt_size < BUFFER_SIZE)
+        {
+            header_buffer[0] = UPLOAD_CTOS_LASTPKT;
+            send(sockfd, header_buffer, HEAD_SIZE + send_pkt_size, 0);
+
+          //  printf_debug(header_buffer , send_pkt_size+ HEAD_SIZE);
+
+            break;
+        }
+        else
+        {
+            header_buffer[0] = UPLOAD_CTOS_ONEPKT;
+            send(sockfd, header_buffer, HEAD_SIZE + send_pkt_size, 0);
+        }
+    }
+
+    printf("send ok %lld\n", totalsendsize);
 
     //设置为守护进程
     //daemonize();

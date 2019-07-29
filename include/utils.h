@@ -15,4 +15,6 @@ int setnonblocking(int fd);
 
 int form_header(char *head, unsigned char type, uint16 length);
 
+void printf_debug(unsigned char * str,uint32 length);
+
 #endif

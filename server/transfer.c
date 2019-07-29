@@ -21,6 +21,7 @@
 #include <event2/event.h>
 
 #include "config.h"
+#include "utils.h"
 
 evutil_socket_t create_listener(uint32 ipaddr, uint16 port)
 {
@@ -63,6 +64,40 @@ void free_transfer_user(struct transfer_user *state)
     state = NULL;
 }
 
+//循环写，直到写到指定长度，如果失败返回-1
+int transfer_send_size(struct transfer_user *user, evutil_socket_t fd, unsigned char *buffer, uint16 sendsize)
+{
+
+    int sended = 0;
+    while (sended < sendsize)
+    {
+        int sendret = send(fd, buffer + sended, sendsize - sended, 0);
+        if (sendret < 0 && errno == EAGAIN)
+        {
+            //在connect dest后，由于是非阻塞，此时tcp连接可能还未建立，如果直接send，会返回-1
+            //这里如果send缓冲区满了，就会循环等待。
+            continue;
+        }
+        else if (sendret <= 0)
+        {
+            //   printf("server down\n");
+            break;
+        }
+        sended += sendret;
+    }
+
+    if (sended >= sendsize)
+        return sendsize;
+
+    //client 断开连接或 recv出错
+    user->cfg->client_nums--;
+    printf("send %d\n", user->cfg->client_nums);
+    event_del(user->read_event);
+
+    free_transfer_user(user);
+    return -1;
+}
+
 //循环读，直到读到指定长度，如果失败返回-1
 int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned char *buffer, uint16 recvsize)
 {
@@ -81,11 +116,45 @@ int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned 
 
     //client 断开连接或 recv出错
     user->cfg->client_nums--;
-    printf("%d\n", user->cfg->client_nums);
+    printf("recv %d\n", user->cfg->client_nums);
     event_del(user->read_event);
 
     free_transfer_user(user);
     return -1;
+}
+
+int transfer_upload_send_nextpktnum(struct transfer_user *user, evutil_socket_t fd)
+{
+    unsigned char header[HEAD_SIZE];
+    memset(header, 0, HEAD_SIZE);
+    header[0] = UPLOAD_STOC_NEXTPKTNUM;
+    header[2] = user->temp_recv_pktnum >> 8;
+    header[3] = user->temp_recv_pktnum;
+
+    return transfer_send_size(user, fd, header, HEAD_SIZE);
+}
+
+int transfer_upload_send_nextchunknum(struct transfer_user *user, evutil_socket_t fd)
+{
+    unsigned char header[HEAD_SIZE];
+    memset(header, 0, HEAD_SIZE);
+    header[0] = UPLOAD_STOC_CHUNKNUM;
+    header[2] = user->temp_recv_chuncknum >> 8;
+    header[3] = user->temp_recv_chuncknum;
+    //发送一个chunknum时，pkt清零。
+    user->temp_recv_pktnum = 0;
+    //user->temp_recv_chuncknum++;
+    return transfer_send_size(user, fd, header, HEAD_SIZE);
+}
+
+int writefile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buffer, int writesize)
+{
+
+    lseek(filefd, chunk_num * CHUNK_SIZE + pkt_num * BUFFER_SIZE, SEEK_SET);
+
+    //    printf_debug(buffer, writesize);
+
+    return write(filefd, buffer, writesize);
 }
 
 void transfer_read(evutil_socket_t fd, short events, void *arg)
@@ -100,9 +169,6 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     if (ret == -1)
         return;
 
-    // for (int i = 0; i < 4; i++)
-    //     printf("%x\n", header_buffer[i]);
-
     uint16 datalength = (header_buffer[2] << 8) + header_buffer[3];
 
     ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
@@ -111,10 +177,44 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     if (header_buffer[0] == UPLOAD_CTOS_START)
     {
         struct fileinfo *finfo = (struct fileinfo *)(header_buffer + HEAD_SIZE);
-        printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
+        //     printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
+        memcpy(&user->finfo, finfo, sizeof(struct fileinfo));
+
+        if ((user->filefd = open(finfo->filename, O_RDWR | O_CREAT, 0644)) == -1)
+        {
+            printf("open erro ！\n");
+            exit(-1);
+        }
+        user->temp_recv_chuncknum = user->temp_recv_pktnum = 0;
+        int r = transfer_upload_send_nextchunknum(user, fd);
+        // printf("%d\n", r);
+    }
+    else if (header_buffer[0] == UPLOAD_CTOS_ONEPKT)
+    {
+        //    printf("\ndatalength: %d\n", datalength);
+        writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, header_buffer + HEAD_SIZE, datalength);
+        user->temp_recv_pktnum++;
+        if (user->temp_recv_pktnum == PKTS_PER_CHUNK)
+        {
+            user->temp_recv_pktnum = 0;
+            user->temp_recv_chuncknum++;
+            transfer_upload_send_nextchunknum(user, fd);
+        }
+        else
+        {
+            transfer_upload_send_nextpktnum(user, fd);
+        }
     }
 
-    printf("aaa%d\n", datalength);
+    else if (header_buffer[0] == UPLOAD_CTOS_LASTPKT)
+    {
+
+        // printf_debug(header_buffer + HEAD_SIZE, datalength);
+        printf("%d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
+        // printf("\ndatalength: %d\n", datalength);
+        writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, header_buffer + HEAD_SIZE, datalength);
+        close(user->filefd);
+    }
 
     // int i;
     // uint32 recvsize = 0;
