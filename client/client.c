@@ -27,6 +27,7 @@ int select_recv(int sockfd, char *buffer, int recvsize)
     fd_set rfds;
     int maxfd = sockfd;
     int ret = 0;
+    int totalsize = 0;
     while (1)
     {
         FD_ZERO(&rfds);
@@ -43,8 +44,11 @@ int select_recv(int sockfd, char *buffer, int recvsize)
         else
         {
             bzero(buffer, HEAD_SIZE);
-            int len = recv(sockfd, buffer, HEAD_SIZE, 0);
+            int len = recv(sockfd, buffer + totalsize, recvsize - totalsize, 0);
             if (len > 0)
+                totalsize += len;
+
+            if (totalsize == recvsize)
                 return recvsize;
             else if (len < 0)
                 printf("receive failed!\n");
@@ -71,6 +75,11 @@ int main(int argc, char **argv)
     //     printf("usage: ./%s ip_address port \n", basename(argv[0]));
     //     return 1;
     // }
+    struct timeval start;
+    struct timeval end;
+
+    unsigned long diff;
+    gettimeofday(&start, NULL);
 
     int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -84,7 +93,8 @@ int main(int argc, char **argv)
     server_addr.sin_family = AF_INET;
 
     server_addr.sin_port = htons(6000);
-    if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+     if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+  //  if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
     {
         //   perror(argv[1]);
         exit(errno);
@@ -109,8 +119,9 @@ int main(int argc, char **argv)
 
     unsigned char header_buffer[HEAD_SIZE + BUFFER_SIZE];
 
-    char *filename = "/home/qinrui/Github/linux-master.zip";
-    //char *filename = "/home/qinrui/Github/LICENSE";
+    char *filename = "/home/qinrui/Github/LibeventBook.pdf";
+    //       char *filename = "/home/qinrui/Github/linux-master.zip";
+    // char *filename = "/home/qinrui/Github/LICENSE";
     int fd = 0;
     if ((fd = open(filename, O_RDONLY)) == -1)
     {
@@ -137,12 +148,12 @@ int main(int argc, char **argv)
 
     int last_pkt = finfo->filesize % CHUNK_SIZE / BUFFER_SIZE + 1;
 
-    usleep(500);
+    //usleep(500);
+    sleep(1);
 
     //发送文件名
     if (1)
     {
-
         uint16 sendsize = HEAD_SIZE + namelength + sizeof(uint64);
 
         form_header(header_buffer, UPLOAD_CTOS_START, sendsize);
@@ -166,7 +177,7 @@ int main(int argc, char **argv)
 
             //printf_debug(header_buffer+)
 
-            //    printf("ccc %d\n", send_checkun_num);
+            printf("ccc %d\n", send_checkun_num);
             send_pkt_size = readfile_onepkt(fd, send_checkun_num, send_pkt_num, header_buffer + HEAD_SIZE, BUFFER_SIZE);
         }
         else if (recv_header[0] == UPLOAD_STOC_NEXTPKTNUM)
@@ -174,7 +185,7 @@ int main(int argc, char **argv)
             header_buffer[0] = UPLOAD_CTOS_ONEPKT;
             //send_pkt_num = *((uint16 *)(recv_header + 2));
             send_pkt_num = (recv_header[2] << 8) + recv_header[3];
-            // printf("ppp %d\n", send_pkt_num);
+            //   printf("ppp %d\n", send_pkt_num);
             send_pkt_size = readfile_onepkt(fd, send_checkun_num, send_pkt_num, header_buffer + HEAD_SIZE, BUFFER_SIZE);
         }
 
@@ -187,12 +198,13 @@ int main(int argc, char **argv)
             header_buffer[0] = UPLOAD_CTOS_LASTPKT;
             send(sockfd, header_buffer, HEAD_SIZE + send_pkt_size, 0);
 
-          //  printf_debug(header_buffer , send_pkt_size+ HEAD_SIZE);
+            //  printf_debug(header_buffer , send_pkt_size+ HEAD_SIZE);
 
             break;
         }
         else
         {
+            usleep(1000);
             header_buffer[0] = UPLOAD_CTOS_ONEPKT;
             send(sockfd, header_buffer, HEAD_SIZE + send_pkt_size, 0);
         }
@@ -200,14 +212,21 @@ int main(int argc, char **argv)
 
     printf("send ok %lld\n", totalsendsize);
 
+    gettimeofday(&end, NULL);
+    diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
+    //  printf("thedifference is %.2ld\n", diff);
+
+    double speed = totalsendsize * 1.0 / 1024 / 1024 * 1000000 / diff;
+    printf("speed is  %.2lfM/s\n", speed);
+
     //设置为守护进程
     //daemonize();
 
     //保证只有一个主进程实例
     //int oncefd = open_only_once();
 
-    while (1)
-        ;
+    // while (1)
+    //     ;
 
     //close(oncefd);
     return 0;

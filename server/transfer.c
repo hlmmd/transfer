@@ -173,6 +173,10 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
 
     ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
 
+    printf_debug(header_buffer,HEAD_SIZE);
+
+    usleep(1000);
+
     //传输文件开始。发送文件名和文件大小
     if (header_buffer[0] == UPLOAD_CTOS_START)
     {
@@ -191,6 +195,7 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     }
     else if (header_buffer[0] == UPLOAD_CTOS_ONEPKT)
     {
+        //   usleep(1000);
         //    printf("\ndatalength: %d\n", datalength);
         writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, header_buffer + HEAD_SIZE, datalength);
         user->temp_recv_pktnum++;
@@ -205,12 +210,10 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
             transfer_upload_send_nextpktnum(user, fd);
         }
     }
-
     else if (header_buffer[0] == UPLOAD_CTOS_LASTPKT)
     {
-
         // printf_debug(header_buffer + HEAD_SIZE, datalength);
-        printf("%d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
+        printf("c : %d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
         // printf("\ndatalength: %d\n", datalength);
         writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, header_buffer + HEAD_SIZE, datalength);
         close(user->filefd);
