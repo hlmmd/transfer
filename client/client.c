@@ -61,10 +61,25 @@ int select_recv(int sockfd, char *buffer, int recvsize)
     }
 }
 
+int filediff = 0;
+
 int readfile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buffer, int readsize)
 {
+    struct timeval start;
+    struct timeval end;
+    
+        gettimeofday(&start, NULL);
+
     lseek(filefd, chunk_num * CHUNK_SIZE + pkt_num * BUFFER_SIZE, SEEK_SET);
-    return read(filefd, buffer, readsize);
+    int ret = read(filefd, buffer, readsize);
+
+
+
+    gettimeofday(&end, NULL);
+
+filediff += (1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec);
+
+    return ret;
 }
 
 int main(int argc, char **argv)
@@ -93,8 +108,8 @@ int main(int argc, char **argv)
     server_addr.sin_family = AF_INET;
 
     server_addr.sin_port = htons(6000);
-     if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
-  //  if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+      if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+    //if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
     {
         //   perror(argv[1]);
         exit(errno);
@@ -119,8 +134,8 @@ int main(int argc, char **argv)
 
     unsigned char header_buffer[HEAD_SIZE + BUFFER_SIZE];
 
-    char *filename = "/home/qinrui/Github/LibeventBook.pdf";
-    //       char *filename = "/home/qinrui/Github/linux-master.zip";
+    //char *filename = "/home/qinrui/Github/LibeventBook.pdf";
+    char *filename = "/home/qinrui/Github/linux-master.zip";
     // char *filename = "/home/qinrui/Github/LICENSE";
     int fd = 0;
     if ((fd = open(filename, O_RDONLY)) == -1)
@@ -204,7 +219,6 @@ int main(int argc, char **argv)
         }
         else
         {
-            usleep(1000);
             header_buffer[0] = UPLOAD_CTOS_ONEPKT;
             send(sockfd, header_buffer, HEAD_SIZE + send_pkt_size, 0);
         }
@@ -217,6 +231,11 @@ int main(int argc, char **argv)
     //  printf("thedifference is %.2ld\n", diff);
 
     double speed = totalsendsize * 1.0 / 1024 / 1024 * 1000000 / diff;
+
+
+    printf("%d %d\n",filediff, diff);
+
+
     printf("speed is  %.2lfM/s\n", speed);
 
     //设置为守护进程

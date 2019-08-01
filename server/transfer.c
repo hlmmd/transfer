@@ -106,12 +106,14 @@ int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned 
     while (tempsize < recvsize)
     {
         result = recv(fd, buffer + tempsize, recvsize - tempsize, 0);
-        if (result <= 0)
-            break;
+        if(result < 0 && errno == EAGAIN)
+            continue;
+        if (result <= 0  )
+            break;        
         tempsize += result;
     }
 
-    if (tempsize >= recvsize || (result < 0 && errno == EAGAIN))
+    if (tempsize >= recvsize )
         return recvsize;
 
     //client 断开连接或 recv出错
@@ -173,9 +175,9 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
 
     ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
 
-    printf_debug(header_buffer,HEAD_SIZE);
+    //printf_debug(header_buffer,HEAD_SIZE);
 
-    usleep(1000);
+    //usleep(1000);
 
     //传输文件开始。发送文件名和文件大小
     if (header_buffer[0] == UPLOAD_CTOS_START)

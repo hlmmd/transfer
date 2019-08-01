@@ -2,9 +2,7 @@
 #define INCLUDE_HEADERS
 
 //所有报文头长度为4，包括1位报文类型，1位填充字节，2位报文长度（不包括报文头）
-#define HEAD_SIZE 4
 
-#define BUFFER_SIZE 4096
 
 
 

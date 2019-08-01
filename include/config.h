@@ -6,9 +6,13 @@
 #define FILENAME_MAXLEN 128
 
 
-#define CHUNK_SIZE 4194304 //4M 4*1024*1024
+#define HEAD_SIZE 4
 
-#define PKTS_PER_CHUNK  1024
+#define BUFFER_SIZE (8192)
+
+#define CHUNK_SIZE (4194304) //4M 4*1024*1024
+
+#define PKTS_PER_CHUNK  (CHUNK_SIZE/BUFFER_SIZE)
 
 #include "headers.h"
 
