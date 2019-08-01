@@ -39,6 +39,9 @@ evutil_socket_t create_listener(uint32 ipaddr, uint16 port)
     {
         int one = 1;
         setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+
+        int recvbuff = 500 * 1024 * 1024;
+        setsockopt(listener, SOL_SOCKET, SO_RCVBUF, (const char *)&recvbuff, sizeof(int));
     }
 
     if (bind(listener, (struct sockaddr *)&sin, sizeof(sin)) < 0)
@@ -98,23 +101,40 @@ int transfer_send_size(struct transfer_user *user, evutil_socket_t fd, unsigned 
     return -1;
 }
 
+int readdiff = 0;
+
 //循环读，直到读到指定长度，如果失败返回-1
 int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned char *buffer, uint16 recvsize)
 {
+
+    struct timeval start;
+    struct timeval end;
+    gettimeofday(&start, NULL);
+
     uint16 tempsize = 0;
     int result = 0;
     while (tempsize < recvsize)
     {
         result = recv(fd, buffer + tempsize, recvsize - tempsize, 0);
-        if(result < 0 && errno == EAGAIN)
+        if (result < 0 && errno == EAGAIN)
+        {
+         //   usleep(100);
             continue;
-        if (result <= 0  )
-            break;        
+        }
+
+        if (result <= 0)
+            break;
         tempsize += result;
     }
 
-    if (tempsize >= recvsize )
+    gettimeofday(&end, NULL);
+
+    readdiff += (1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec);
+
+    if (tempsize >= recvsize)
         return recvsize;
+
+    printf("%d\n", readdiff);
 
     //client 断开连接或 recv出错
     user->cfg->client_nums--;
@@ -289,14 +309,14 @@ alloc_transfer_user(struct transfer_config *cfg, evutil_socket_t fd)
 
     user->cfg = cfg;
 
-    user->read_event = event_new(base, fd, EV_READ | EV_PERSIST, transfer_read, user);
+    user->read_event = event_new(base, fd, EV_READ | EV_PERSIST | EV_ET, transfer_read, user);
     if (!user->read_event)
     {
         free(user);
         user = NULL;
         return NULL;
     }
-    user->write_event = event_new(base, fd, EV_WRITE | EV_PERSIST, transfer_write, user);
+    user->write_event = event_new(base, fd, EV_WRITE | EV_PERSIST | EV_ET, transfer_write, user);
 
     if (!user->write_event)
     {
@@ -352,7 +372,7 @@ int transfer_loop(struct transfer_config *cfg)
 
     cfg->base = base;
 
-    listener_event = event_new(base, listener, EV_READ | EV_PERSIST, transfer_accept, (void *)cfg);
+    listener_event = event_new(base, listener, EV_READ | EV_PERSIST | EV_ET, transfer_accept, (void *)cfg);
     /*XXX check it */
     event_add(listener_event, NULL);
 

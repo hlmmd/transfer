@@ -67,17 +67,15 @@ int readfile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buffe
 {
     struct timeval start;
     struct timeval end;
-    
-        gettimeofday(&start, NULL);
+
+    gettimeofday(&start, NULL);
 
     lseek(filefd, chunk_num * CHUNK_SIZE + pkt_num * BUFFER_SIZE, SEEK_SET);
     int ret = read(filefd, buffer, readsize);
 
-
-
     gettimeofday(&end, NULL);
 
-filediff += (1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec);
+    filediff += (1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec);
 
     return ret;
 }
@@ -108,8 +106,8 @@ int main(int argc, char **argv)
     server_addr.sin_family = AF_INET;
 
     server_addr.sin_port = htons(6000);
-      if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
-    //if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+  //     if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+    if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
     {
         //   perror(argv[1]);
         exit(errno);
@@ -232,9 +230,7 @@ int main(int argc, char **argv)
 
     double speed = totalsendsize * 1.0 / 1024 / 1024 * 1000000 / diff;
 
-
-    printf("%d %d\n",filediff, diff);
-
+    printf("%d %d\n", filediff, diff);
 
     printf("speed is  %.2lfM/s\n", speed);
 
