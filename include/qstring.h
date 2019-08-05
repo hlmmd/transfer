@@ -23,7 +23,9 @@ struct qstring
 
 
 int qstring_init(struct qstring **qstr);
+int qstring_free(struct qstring **qstr);
 uint64 qstring_length(struct qstring *qstr);
+uint32 qstring_process_copy(struct qstring *qstr, void *buffer, int *copylen);
 
 int qstring_insert(struct qstring *qstr, void *buffer, uint32 buffer_len);
 int qstring_recv_epoll_et(struct qstring *qstr, int socket_fd);

@@ -144,11 +144,6 @@ int main(int argc, char **argv)
     //     printf("usage: ./%s ip_address port \n", basename(argv[0]));
     //     return 1;
     // }
-    struct timeval start;
-    struct timeval end;
-
-    unsigned long diff;
-    gettimeofday(&start, NULL);
 
     int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -163,7 +158,8 @@ int main(int argc, char **argv)
 
     server_addr.sin_port = htons(6000);
     if (inet_aton("192.168.3.90", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
-    //  if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+    // if (inet_aton("10.60.148.139", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
+    //     if (inet_aton("120.27.249.122", (struct in_addr *)&server_addr.sin_addr.s_addr) == 0)
     {
         //   perror(argv[1]);
         exit(errno);
@@ -222,39 +218,46 @@ int main(int argc, char **argv)
     //usleep(500);
     sleep(1);
 
+    struct timeval start;
+    struct timeval end;
+
+    unsigned long diff;
+    gettimeofday(&start, NULL);
+
     printf("%lld\n", finfo->filesize);
 
-    if (1)
-    {
-        int sended = 0;
-        while (sended < (finfo->filesize))
-        {
-            // usleep(100);
-            int s = BUFFER_SIZE > (finfo->filesize - sended) ? finfo->filesize : (finfo->filesize - sended);
-            int ret = send(sockfd, pkt, s, 0);
-            // if (ret < 0)
-            //     continue;
-            sended += ret;
-        }
+    // if (1)
+    // {
+    //     int sended = 0;
+    //     while (sended < (finfo->filesize))
+    //     {
+    //         // usleep(100);
+    //         int s = BUFFER_SIZE > (finfo->filesize - sended) ? finfo->filesize : (finfo->filesize - sended);
+    //         int ret = send(sockfd, pkt, s, 0);
+    //         if (ret < 0)
+    //             continue;
+    //         sended += ret;
+    //     }
 
-        gettimeofday(&end, NULL);
-        diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
-        //  printf("thedifference is %.2ld\n", diff);
+    //     gettimeofday(&end, NULL);
+    //     diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
+    //     //  printf("thedifference is %.2ld\n", diff);
 
-        double speed = finfo->filesize * 1.0 / 1024 / 1024 * 1000000 / diff;
+    //     double speed = finfo->filesize * 1.0 / 1024 / 1024 * 1000000 / diff;
 
-        printf("%d %d\n", filediff, diff);
+    //     printf("%d %d\n", filediff, diff);
 
-        printf("speed is  %.2lfM/s\n", speed);
-    }
-    exit(0);
+    //     printf("speed is  %.2lfM/s\n", speed);
+    // }
+    // close(sockfd);
+    // exit(0);
 
     //发送文件名
     if (1)
     {
         uint16 sendsize = HEAD_SIZE + namelength + sizeof(uint64);
         pkt->type = UPLOAD_CTOS_START;
-        pkt->value = sendsize - 4;
+        pkt->length = sendsize - 4;
         send(sockfd, pkt, sendsize, 0);
     }
 
@@ -264,13 +267,13 @@ int main(int argc, char **argv)
     unsigned char *file_buffer = (unsigned char *)malloc(CHUNK_SIZE + HEAD_SIZE);
     while (1)
     {
-        //   unsigned char recv_header[HEAD_SIZE];
-        //  select_recv(sockfd, pkt, HEAD_SIZE);
+        unsigned char recv_header[HEAD_SIZE];
+        select_recv(sockfd, pkt, HEAD_SIZE);
         int send_pkt_size = 0;
 
-        //   if (pkt->type == UPLOAD_STOC_CHUNKNUM)
+        if (pkt->type == UPLOAD_STOC_CHUNKNUM)
         {
-            uint16 send_checkun_num = pkt->value;
+            uint16 send_checkun_num = pkt->length;
             printf("ccc %d\n", send_checkun_num);
 
             uint32 read_chunk_size = readfile_onechunk(fd, send_checkun_num, file_buffer, CHUNK_SIZE);
@@ -281,12 +284,12 @@ int main(int argc, char **argv)
             while (read_chunk_size >= BUFFER_SIZE)
             {
                 pkt->type = UPLOAD_CTOS_ONEPKT;
-                pkt->value = send_checkun_num;
+                pkt->length = BUFFER_SIZE;
 
                 uint16 sended_onepkt = 0;
                 while (sended_onepkt < BUFFER_SIZE)
                 {
-                    int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + BUFFER_SIZE - +sended_onepkt, 0);
+                    int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + BUFFER_SIZE - sended_onepkt, 0);
                     if (ret < 0)
                         continue;
                     else if (ret == 0)

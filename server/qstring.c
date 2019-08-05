@@ -28,7 +28,25 @@ int qstring_init(struct qstring **qstr)
     (*qstr)->length = 0;
     (*qstr)->head = (struct qnode *)malloc(sizeof(struct qnode));
     memset((*qstr)->head, 0, sizeof(struct qnode));
+
+    (*qstr)->head->start = (*qstr)->head->end = QNODE_SIZE - 2;
+
     (*qstr)->tail = (*qstr)->head;
+    return RETURN_SUCCESS;
+}
+
+int qstring_free(struct qstring **qstr)
+{
+    struct qnode *q = (*qstr)->head;
+    while (q)
+    {
+        struct qnode *temp = q;
+        q = q->next;
+        free(temp);
+        temp = NULL;
+    }
+    free(*qstr);
+    *qstr = NULL;
     return RETURN_SUCCESS;
 }
 
@@ -100,17 +118,101 @@ int qstring_recv_epoll_et(struct qstring *qstr, int socket_fd)
     }
 
     //当前socket缓冲区已经读完
-    if (recvret < 0 && (errno == EAGAIN))
+    if (recvret < 0 && (errno == EAGAIN || errno == EINPROGRESS))
         return RETURN_SUCCESS;
 
     //对端断开
     if (recvret == 0)
     {
         close(socket_fd);
-        return RETURN_SUCCESS;
+        return RETURN_CLOSE;
     }
 
     return RETURN_ERROR;
+}
+
+uint32 qstring_process_copy(struct qstring *qstr, void *buffer, int *copylen)
+{
+    if (qstr->length < HEAD_SIZE)
+        return RETURN_ERROR;
+
+    struct qnode *q = qstr->head;
+    uint32 to_process = HEAD_SIZE;
+
+    bool next_node = false;
+
+    //读报文头
+    uint32 qlen = q->end - q->start;
+    if (qlen <= HEAD_SIZE && (q->end == QNODE_SIZE))
+    {
+        next_node = true;
+        memcpy(buffer, q->data + q->start, qlen);
+        if (qlen != HEAD_SIZE)
+            memcpy(buffer + qlen, q->next->data, HEAD_SIZE - qlen);
+    }
+    else
+    {
+        memcpy(buffer, q->data + q->start, HEAD_SIZE);
+    }
+    uint16 type = *((uint16 *)(buffer));
+    uint16 pktlen = *((uint16 *)(buffer + sizeof(uint16)));
+
+    //未接收到制定的长度，不处理
+    if ((pktlen + HEAD_SIZE) > qstr->length)
+        return RETURN_ERROR;
+
+    //读取报文头时读到了下一个块
+    if (next_node == true)
+    {
+        next_node = false;
+        struct qnode *temp = q;
+        q = q->next;
+        q->start = HEAD_SIZE - qlen;
+        free(temp);
+        temp = NULL;
+        qstr->node_num--;
+    }
+    else
+    {
+        q->start += HEAD_SIZE;
+    }
+
+    //读取剩下的长度
+    to_process = pktlen;
+
+    qlen = q->end - q->start;
+    if (qlen <= to_process && (q->end == QNODE_SIZE))
+    {
+        next_node = true;
+        memcpy(buffer + HEAD_SIZE, q->data + q->start, qlen);
+        if (qlen != to_process)
+            memcpy(buffer + HEAD_SIZE + qlen, q->next->data, to_process - qlen);
+    }
+    else
+    {
+        memcpy(buffer + HEAD_SIZE, q->data + q->start, to_process);
+    }
+    //读取报文时读到了下一个块
+    if (next_node == true)
+    {
+        struct qnode *temp = q;
+        q = q->next;
+        q->start = to_process - qlen;
+        free(temp);
+        temp = NULL;
+        qstr->node_num--;
+    }
+    else
+    {
+        q->start += to_process;
+    }
+
+    *copylen = HEAD_SIZE + pktlen;
+    qstr->length -= (HEAD_SIZE + pktlen);
+
+    qstr->head = q;
+
+    return RETURN_SUCCESS;
 }
 
 uint32 qstring_remove(struct qstring *qstr, uint32 len)
@@ -136,7 +238,6 @@ uint32 qstring_remove(struct qstring *qstr, uint32 len)
         {
             struct qnode *temp = q;
             q = q->next;
-            qstr->head = q;
             free(temp);
             qstr->node_num--;
         }
@@ -144,6 +245,7 @@ uint32 qstring_remove(struct qstring *qstr, uint32 len)
 
     //更新长度
     qstr->length -= len;
+    qstr->head = q;
 
     return RETURN_SUCCESS;
 }

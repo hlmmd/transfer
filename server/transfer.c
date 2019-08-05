@@ -63,6 +63,7 @@ evutil_socket_t create_listener(uint32 ipaddr, uint16 port)
 
 void free_transfer_user(struct transfer_user *state)
 {
+    qstring_free(&state->qstr);
     event_free(state->read_event);
     event_free(state->write_event);
     free(state);
@@ -160,11 +161,12 @@ int transfer_upload_send_nextpktnum(struct transfer_user *user, evutil_socket_t 
 
 int transfer_upload_send_nextchunknum(struct transfer_user *user, evutil_socket_t fd)
 {
+
     unsigned char header[HEAD_SIZE];
     memset(header, 0, HEAD_SIZE);
     header[0] = UPLOAD_STOC_CHUNKNUM;
-    header[2] = user->temp_recv_chuncknum >> 8;
-    header[3] = user->temp_recv_chuncknum;
+    header[3] = user->temp_recv_chuncknum >> 8;
+    header[2] = user->temp_recv_chuncknum;
     //发送一个chunknum时，pkt清零。
     user->temp_recv_pktnum = 0;
     //user->temp_recv_chuncknum++;
@@ -181,17 +183,103 @@ int writefile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buff
     return write(filefd, buffer, writesize);
 }
 
+uint32 qstring_process_nonecopy(struct qstring *qstr)
+{
+    if (qstr->length < HEAD_SIZE)
+        return RETURN_ERROR;
+    struct qnode *q = qstr->head;
+    if (q->end - q->start >= HEAD_SIZE)
+    {
+        uint16 type = *((uint16 *)(q->data + q->start));
+        uint16 pktlen = *((uint16 *)(q->data + q->start + sizeof(uint16)));
+        printf_debug(q->data + q->start, HEAD_SIZE);
+    }
+    qstring_remove(qstr, HEAD_SIZE);
+    exit(0);
+
+    return RETURN_SUCCESS;
+}
+
 void transfer_read(evutil_socket_t fd, short events, void *arg)
 {
-
+    struct transfer_packet *pkt = (struct transfer_packet *)malloc(sizeof(struct transfer_packet));
+    memset(pkt, 0, sizeof(*pkt));
     struct transfer_user *user = (struct transfer_user *)arg;
 
-    qstring_recv_epoll_et(user->qstr, fd);
+    int recvret = qstring_recv_epoll_et(user->qstr, fd);
 
-    printf("%lld\n", user->qstr->length);
+    printf("unprocess size:%lld\n", user->qstr->length);
+    if ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE))
+    {
+        free(pkt);
+        pkt = NULL;
+        printf("%d\n", recvret);
+        user->cfg->client_nums--;
+        printf("%d\n", user->cfg->client_nums);
+        event_del(user->read_event);
+        free_transfer_user(user);
+        return;
+    }
+    int pktlen = 0;
+    while (1)
+    {
+        int process_ret = qstring_process_copy(user->qstr, pkt, &pktlen);
+
+        printf("unprocess size:%lld\n", user->qstr->length);
+
+        if (process_ret == RETURN_ERROR)
+        {
+            free(pkt);
+            pkt = NULL;
+            return;
+        }
+        if (pkt->type == UPLOAD_CTOS_START)
+        {
+            struct fileinfo *finfo = (struct fileinfo *)(((unsigned char *)pkt) + HEAD_SIZE);
+            printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
+            memcpy(&user->finfo, finfo, sizeof(struct fileinfo));
+
+            if ((user->filefd = open(finfo->filename, O_RDWR | O_CREAT, 0644)) == -1)
+            {
+                printf("open erro ！\n");
+                exit(-1);
+            }
+            user->temp_recv_chuncknum = user->temp_recv_pktnum = 0;
+            //向client发送要传输的文件块序号
+            int r = transfer_upload_send_nextchunknum(user, fd);
+        }
+        else if (pkt->type == UPLOAD_CTOS_ONEPKT)
+        {
+            writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, pkt->data, pkt->length);
+            user->temp_recv_pktnum++;
+            if (user->temp_recv_pktnum == PKTS_PER_CHUNK)
+            {
+                user->temp_recv_pktnum = 0;
+                user->temp_recv_chuncknum++;
+                printf("next chunk:%d\n", user->temp_recv_chuncknum);
+                transfer_upload_send_nextchunknum(user, fd);
+            }
+            else
+            {
+                //    transfer_upload_send_nextpktnum(user, fd);
+            }
+        }
+        else
+        {
+            free(pkt);
+            pkt = NULL;
+            printf("error header!!!!\n");
+            user->cfg->client_nums--;
+            printf("%d\n", user->cfg->client_nums);
+            event_del(user->read_event);
+            free_transfer_user(user);
+            return;
+        }
+    }
+
+    //qstring_process_nonecopy(user->qstr);
+    exit(0);
     return;
-
-    struct transfer_packet *pkt = (struct transfer_packet *)malloc(sizeof(struct transfer_packet));
 
     unsigned char header_buffer[BUFFER_SIZE + HEAD_SIZE];
     memset(pkt, 0, sizeof(*pkt));

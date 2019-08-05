@@ -5,6 +5,8 @@
 
 #define RETURN_ERROR -1
 
+#define RETURN_CLOSE -2
+
 #define USER_LIMIT 65535
 
 #define FILENAME_MAXLEN 128
@@ -85,7 +87,7 @@ struct transfer_user
 struct transfer_packet
 {
     uint16 type;
-    uint16 value;
+    uint16 length;
     unsigned char data[BUFFER_SIZE];
 };
 

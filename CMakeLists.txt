@@ -37,7 +37,7 @@ aux_source_directory(server SRC_LIST)
 # 设置可执行文件
 add_executable(transfer_server ${SRC_LIST} ${COMMON_LIST})
 
-add_executable(qstring qstring.c)
+#add_executable(qstring qstring.c)
 
 aux_source_directory(client SRC_LIST_C  ) 
 

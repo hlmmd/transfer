@@ -27,6 +27,12 @@ int main()
     struct transfer_config *cfg = (struct transfer_config *)malloc(sizeof(struct transfer_config));
 
     cfg->client_nums = 0;
+
+    struct in_addr s;
+    //inet_aton("172.16.187.123", (struct in_addr *)&s.s_addr);
+    //inet_aton("120.27.249.122", (struct in_addr *)&s.s_addr);
+    cfg->ip_addr = s.s_addr;
+
     cfg->ip_addr = 0;
     cfg->port = 6000;
 
