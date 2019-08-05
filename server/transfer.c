@@ -23,6 +23,8 @@
 #include "config.h"
 #include "utils.h"
 
+#include "qstring.h"
+
 evutil_socket_t create_listener(uint32 ipaddr, uint16 port)
 {
 
@@ -118,7 +120,7 @@ int transfer_read_size(struct transfer_user *user, evutil_socket_t fd, unsigned 
         result = recv(fd, buffer + tempsize, recvsize - tempsize, 0);
         if (result < 0 && errno == EAGAIN)
         {
-         //   usleep(100);
+            //   usleep(100);
             continue;
         }
 
@@ -181,29 +183,38 @@ int writefile_onepkt(int filefd, int chunk_num, int pkt_num, unsigned char *buff
 
 void transfer_read(evutil_socket_t fd, short events, void *arg)
 {
+
     struct transfer_user *user = (struct transfer_user *)arg;
+
+    qstring_recv_epoll_et(user->qstr, fd);
+
+    printf("%lld\n", user->qstr->length);
+    return;
+
+    struct transfer_packet *pkt = (struct transfer_packet *)malloc(sizeof(struct transfer_packet));
+
     unsigned char header_buffer[BUFFER_SIZE + HEAD_SIZE];
-    memset(header_buffer, 0, sizeof(header_buffer));
+    memset(pkt, 0, sizeof(*pkt));
 
     //接收报文头
     int ret = 0;
-    ret += transfer_read_size(user, fd, header_buffer, HEAD_SIZE);
+    //  ret += transfer_read_size(user, fd, pkt, sizeof(*pkt));
     if (ret == -1)
         return;
 
     uint16 datalength = (header_buffer[2] << 8) + header_buffer[3];
 
-    ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
+    //ret += transfer_read_size(user, fd, header_buffer + ret, datalength);
 
-    //printf_debug(header_buffer,HEAD_SIZE);
+    printf_debug(header_buffer, HEAD_SIZE);
 
     //usleep(1000);
 
     //传输文件开始。发送文件名和文件大小
-    if (header_buffer[0] == UPLOAD_CTOS_START)
+    if (header_buffer[1] == UPLOAD_CTOS_START)
     {
         struct fileinfo *finfo = (struct fileinfo *)(header_buffer + HEAD_SIZE);
-        //     printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
+        printf("filesize:%lld, filename:%s\n", finfo->filesize, finfo->filename);
         memcpy(&user->finfo, finfo, sizeof(struct fileinfo));
 
         if ((user->filefd = open(finfo->filename, O_RDWR | O_CREAT, 0644)) == -1)
@@ -229,7 +240,7 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
         }
         else
         {
-            transfer_upload_send_nextpktnum(user, fd);
+            //    transfer_upload_send_nextpktnum(user, fd);
         }
     }
     else if (header_buffer[0] == UPLOAD_CTOS_LASTPKT)
@@ -308,6 +319,8 @@ alloc_transfer_user(struct transfer_config *cfg, evutil_socket_t fd)
         return NULL;
 
     user->cfg = cfg;
+
+    qstring_init(&user->qstr);
 
     user->read_event = event_new(base, fd, EV_READ | EV_PERSIST | EV_ET, transfer_read, user);
     if (!user->read_event)

@@ -38,8 +38,8 @@ int main()
     //保证只有一个主进程实例
     //int oncefd = open_only_once();
 
-    while (1)
-        ;
+    // while (1)
+    //     ;
 
     //close(oncefd);
     return 0;

@@ -1,10 +1,13 @@
 #ifndef INCLUDE_CONFIG
 #define INCLUDE_CONFIG
 
+#define RETURN_SUCCESS 1
+
+#define RETURN_ERROR -1
+
 #define USER_LIMIT 65535
 
 #define FILENAME_MAXLEN 128
-
 
 #define HEAD_SIZE 4
 
@@ -12,9 +15,17 @@
 
 #define CHUNK_SIZE (4194304) //4M 4*1024*1024
 
-#define PKTS_PER_CHUNK  (CHUNK_SIZE/BUFFER_SIZE)
+#define PKTS_PER_CHUNK (CHUNK_SIZE / BUFFER_SIZE)
+
+
+typedef unsigned char uint8;
+typedef unsigned int uint32;
+typedef unsigned short uint16;
+typedef unsigned long long int uint64;
 
 #include "headers.h"
+
+#include "qstring.h"
 
 #include <event2/event.h>
 
@@ -26,10 +37,7 @@ typedef enum
 } bool;
 #endif
 
-typedef unsigned char uint8;
-typedef unsigned int uint32;
-typedef unsigned short uint16;
-typedef unsigned long long int uint64;
+
 
 struct transfer_config
 {
@@ -52,6 +60,8 @@ struct transfer_user
 {
     struct transfer_config *cfg;
 
+    struct qstring *qstr;
+
     struct fileinfo finfo;
 
     //最多65536个块，文件最大256G
@@ -70,6 +80,13 @@ struct transfer_user
 
     struct event *read_event;
     struct event *write_event;
+};
+
+struct transfer_packet
+{
+    uint16 type;
+    uint16 value;
+    unsigned char data[BUFFER_SIZE];
 };
 
 #endif
