@@ -236,6 +236,16 @@ int main(int argc, char **argv)
             //     continue;
             sended += ret;
         }
+
+        gettimeofday(&end, NULL);
+        diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
+        //  printf("thedifference is %.2ld\n", diff);
+
+        double speed = finfo->filesize * 1.0 / 1024 / 1024 * 1000000 / diff;
+
+        printf("%d %d\n", filediff, diff);
+
+        printf("speed is  %.2lfM/s\n", speed);
     }
     exit(0);
 
