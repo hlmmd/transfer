@@ -214,7 +214,10 @@ int main(int argc, char **argv)
                     if (ret < 0)
                         continue;
                     else if (ret == 0)
+                    {
+                        close(sockfd);
                         exit(0);
+                    }
                     else
                         sended_onepkt += ret;
                 }
