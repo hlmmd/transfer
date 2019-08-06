@@ -55,6 +55,7 @@ int select_recv(int sockfd, void *buffer, int recvsize)
             else
             {
                 printf("server down\n");
+                exit(0);
                 break;
             }
         }
@@ -179,7 +180,7 @@ int main(int argc, char **argv)
 
             uint32 sended = 0;
 
-            pkt =(struct transfer_packet *)file_buffer;
+            pkt = (struct transfer_packet *)file_buffer;
             uint16 send_pkt_num = 0;
             while (read_chunk_size >= BUFFER_SIZE)
             {
