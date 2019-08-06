@@ -208,7 +208,7 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
 
     int recvret = qstring_recv_epoll_et(user->qstr, fd);
 
-    printf("unprocess size:%lld\n", user->qstr->length);
+   // printf("unprocess size:%lld\n", user->qstr->length);
     if ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE))
     {
         free(pkt);
@@ -225,7 +225,7 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     {
         int process_ret = qstring_process_copy(user->qstr, pkt, &pktlen);
 
-        printf("unprocess size:%lld\n", user->qstr->length);
+      //  printf("unprocess size:%lld\n", user->qstr->length);
 
         if (process_ret == RETURN_ERROR)
         {
@@ -256,13 +256,21 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
             {
                 user->temp_recv_pktnum = 0;
                 user->temp_recv_chuncknum++;
-                printf("next chunk:%d\n", user->temp_recv_chuncknum);
+             //   printf("next chunk:%d\n", user->temp_recv_chuncknum);
                 transfer_upload_send_nextchunknum(user, fd);
             }
             else
             {
                 //    transfer_upload_send_nextpktnum(user, fd);
             }
+        }
+        else if (pkt->type == UPLOAD_CTOS_LASTPKT)
+        {
+            //   printf_debug(pkt->data, pkt->length);
+          //  printf("%d \n", pkt->length);
+         //   printf("%d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
+            writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, pkt->data, pkt->length);
+            close(user->filefd);
         }
         else
         {

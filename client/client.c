@@ -127,7 +127,7 @@ int readfile_onechunk(int filefd, int chunk_num, void *buffer, int readsize)
     gettimeofday(&start, NULL);
 
     lseek(filefd, chunk_num * CHUNK_SIZE, SEEK_SET);
-    int ret = read(filefd, buffer + HEAD_SIZE, readsize);
+    int ret = read(filefd, buffer, readsize);
 
     gettimeofday(&end, NULL);
 
@@ -276,18 +276,20 @@ int main(int argc, char **argv)
             uint16 send_checkun_num = pkt->length;
             printf("ccc %d\n", send_checkun_num);
 
-            uint32 read_chunk_size = readfile_onechunk(fd, send_checkun_num, file_buffer, CHUNK_SIZE);
+            uint32 read_chunk_size = readfile_onechunk(fd, send_checkun_num, file_buffer + HEAD_SIZE, CHUNK_SIZE);
+
             uint32 sended = 0;
 
             pkt = file_buffer;
             uint16 send_pkt_num = 0;
             while (read_chunk_size >= BUFFER_SIZE)
             {
+                //   printf("%lld \n", ( (int) pkt -(int) file_buffer));
                 pkt->type = UPLOAD_CTOS_ONEPKT;
                 pkt->length = BUFFER_SIZE;
 
                 uint16 sended_onepkt = 0;
-                while (sended_onepkt < BUFFER_SIZE)
+                while (sended_onepkt < BUFFER_SIZE + HEAD_SIZE)
                 {
                     int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + BUFFER_SIZE - sended_onepkt, 0);
                     if (ret < 0)
@@ -298,9 +300,32 @@ int main(int argc, char **argv)
                         sended_onepkt += ret;
                 }
                 read_chunk_size -= BUFFER_SIZE;
-                pkt++;
+                pkt = (struct transfer_packet *)((void *)pkt + pkt->length);
             }
-            printf("aaa\n");
+            //发送完成
+            if (read_chunk_size != 0)
+            {
+                pkt->type = UPLOAD_CTOS_LASTPKT;
+                pkt->length = read_chunk_size;
+
+                // printf_debug(pkt->data, pkt->length);
+
+                uint16 sended_onepkt = 0;
+                while (sended_onepkt < HEAD_SIZE + read_chunk_size)
+                {
+                    int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + read_chunk_size - sended_onepkt, 0);
+                    if (ret < 0)
+                        continue;
+                    else if (ret == 0)
+                        exit(0);
+                    else
+                        sended_onepkt += ret;
+                }
+                read_chunk_size -= read_chunk_size;
+
+                break;
+            }
+            //    printf("aaa\n");
         }
 
         // if (recv_header[0] == UPLOAD_STOC_CHUNKNUM)
@@ -358,13 +383,13 @@ int main(int argc, char **argv)
         // }
     }
 
-    printf("send ok %lld\n", totalsendsize);
+    printf("send ok %lld\n", finfo->filesize);
 
     gettimeofday(&end, NULL);
     diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
     //  printf("thedifference is %.2ld\n", diff);
 
-    double speed = totalsendsize * 1.0 / 1024 / 1024 * 1000000 / diff;
+    double speed = finfo->filesize * 1.0 / 1024 / 1024 * 1000000 / diff;
 
     printf("%d %d\n", filediff, diff);
 
