@@ -208,10 +208,11 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
 
     int recvret = qstring_recv_epoll_et(user->qstr, fd);
 
-    printf("unprocess size:%lld\n", user->qstr->length);
-    if (  user->qstr->length== 0  &&  ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE)))
+    //printf("unprocess size:%lld\n", user->qstr->length);
+    //这一块的逻辑还比较乱
+    if ( user->qstr->length== 0  &&  ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE)))
     {
-        printf("!!!unprocess size:%lld\n", user->qstr->length);
+    //    printf("!!!unprocess size:%lld\n", user->qstr->length);
         close(fd);
         free(pkt);
         pkt = NULL;
@@ -222,13 +223,14 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
         free_transfer_user(user);
         return;
     }
+
     int pktlen = 0;
     while (1)
     {
         int process_ret = qstring_process_copy(user->qstr, pkt, &pktlen);
 
         //printf("unprocess size:%lld\n", user->qstr->length);
-        printf_debug(pkt,HEAD_SIZE);
+        //printf_debug(pkt,HEAD_SIZE);
 
         if (process_ret == RETURN_ERROR)
         {
@@ -275,17 +277,21 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
          //   printf("%d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
             writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, pkt->data, pkt->length);
             close(user->filefd);
+            printf("finish\n");
         }
         else
-        {
-            free(pkt);
-            pkt = NULL;
-            printf("error header!!!!\n");
-            user->cfg->client_nums--;
-            printf("%d\n", user->cfg->client_nums);
-            event_del(user->read_event);
-            free_transfer_user(user);
-            return;
+         {
+             printf("error header!!!!\n");
+
+             exit(0);
+        //     free(pkt);
+        //     pkt = NULL;
+        //     printf("error header!!!!\n");
+        //     user->cfg->client_nums--;
+        //     printf("%d\n", user->cfg->client_nums);
+        //     event_del(user->read_event);
+        //     free_transfer_user(user);
+        //     return;
         }
     }
 

@@ -215,10 +215,6 @@ int main(int argc, char **argv)
                 printf("last\n");
                 pkt->type = UPLOAD_CTOS_LASTPKT;
                 pkt->length = read_chunk_size;
-
-
-                printf_debug((void *)pkt ,4);
-                printf("%d %d\n",read_chunk_size,pkt->length);
                 uint16 sended_onepkt = 0;
                 while (sended_onepkt < HEAD_SIZE + read_chunk_size)
                 {
