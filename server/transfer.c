@@ -208,9 +208,11 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
 
     int recvret = qstring_recv_epoll_et(user->qstr, fd);
 
-   // printf("unprocess size:%lld\n", user->qstr->length);
-    if ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE))
+    printf("unprocess size:%lld\n", user->qstr->length);
+    if (  user->qstr->length== 0  &&  ((recvret == RETURN_ERROR) || (recvret == RETURN_CLOSE)))
     {
+        printf("!!!unprocess size:%lld\n", user->qstr->length);
+        close(fd);
         free(pkt);
         pkt = NULL;
         printf("%d\n", recvret);
@@ -225,7 +227,8 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     {
         int process_ret = qstring_process_copy(user->qstr, pkt, &pktlen);
 
-      //  printf("unprocess size:%lld\n", user->qstr->length);
+        //printf("unprocess size:%lld\n", user->qstr->length);
+        printf_debug(pkt,HEAD_SIZE);
 
         if (process_ret == RETURN_ERROR)
         {
@@ -266,7 +269,8 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
         }
         else if (pkt->type == UPLOAD_CTOS_LASTPKT)
         {
-            //   printf_debug(pkt->data, pkt->length);
+          //  printf("aaa\n");
+         //      printf_debug(pkt->data, pkt->length);
           //  printf("%d \n", pkt->length);
          //   printf("%d %d\n", user->temp_recv_chuncknum, user->temp_recv_pktnum);
             writefile_onepkt(user->filefd, user->temp_recv_chuncknum, user->temp_recv_pktnum, pkt->data, pkt->length);
@@ -286,7 +290,7 @@ void transfer_read(evutil_socket_t fd, short events, void *arg)
     }
 
     //qstring_process_nonecopy(user->qstr);
-    exit(0);
+    
     return;
 
     unsigned char header_buffer[BUFFER_SIZE + HEAD_SIZE];

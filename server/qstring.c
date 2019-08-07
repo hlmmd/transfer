@@ -124,7 +124,6 @@ int qstring_recv_epoll_et(struct qstring *qstr, int socket_fd)
     //对端断开
     if (recvret == 0)
     {
-        close(socket_fd);
         return RETURN_CLOSE;
     }
 

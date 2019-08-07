@@ -54,6 +54,7 @@ int select_recv(int sockfd, void *buffer, int recvsize)
                 printf("receive failed!\n");
             else
             {
+                close(sockfd);
                 printf("server down\n");
                 exit(0);
                 break;
@@ -175,7 +176,10 @@ int main(int argc, char **argv)
 
         if (pkt->type == UPLOAD_STOC_CHUNKNUM)
         {
+
             uint16 send_checkun_num = pkt->length;
+            printf("%d/%d\n", send_checkun_num, finfo->chunknum);
+
             uint32 read_chunk_size = readfile_onechunk(fd, send_checkun_num, file_buffer + HEAD_SIZE, CHUNK_SIZE);
 
             uint32 sended = 0;
@@ -194,7 +198,10 @@ int main(int argc, char **argv)
                     if (ret < 0)
                         continue;
                     else if (ret == 0)
+                    {
+                        close(sockfd);
                         exit(0);
+                    }
                     else
                         sended_onepkt += ret;
                 }
@@ -204,13 +211,19 @@ int main(int argc, char **argv)
             //发送完成
             if (read_chunk_size != 0)
             {
+
+                printf("last\n");
                 pkt->type = UPLOAD_CTOS_LASTPKT;
                 pkt->length = read_chunk_size;
 
+
+                printf_debug((void *)pkt ,4);
+                printf("%d %d\n",read_chunk_size,pkt->length);
                 uint16 sended_onepkt = 0;
                 while (sended_onepkt < HEAD_SIZE + read_chunk_size)
                 {
                     int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + read_chunk_size - sended_onepkt, 0);
+                    printf("ret:%d\n",ret);
                     if (ret < 0)
                         continue;
                     else if (ret == 0)
@@ -222,7 +235,6 @@ int main(int argc, char **argv)
                         sended_onepkt += ret;
                 }
                 read_chunk_size -= read_chunk_size;
-
                 break;
             }
         }
@@ -238,6 +250,5 @@ int main(int argc, char **argv)
     printf("speed is  %.2lfM/s\n", speed);
     close(sockfd);
     close(fd);
-
     return 0;
 }
