@@ -115,7 +115,8 @@ int main(int argc, char **argv)
 
     unsigned char header_buffer[HEAD_SIZE + BUFFER_SIZE];
 
-    struct transfer_packet *pkt = (struct transfer_packet *)malloc(sizeof(struct transfer_packet));
+    struct transfer_packet *pktl = (struct transfer_packet *)malloc(sizeof(struct transfer_packet));
+    struct transfer_packet *pkt = pktl;
     if (pkt == NULL)
         exit(0);
     memset(pkt, 0, sizeof(struct transfer_packet));
@@ -219,7 +220,7 @@ int main(int argc, char **argv)
                 while (sended_onepkt < HEAD_SIZE + read_chunk_size)
                 {
                     int ret = send(sockfd, (void *)pkt + sended_onepkt, HEAD_SIZE + read_chunk_size - sended_onepkt, 0);
-                    printf("ret:%d\n",ret);
+                    printf("ret:%d\n", ret);
                     if (ret < 0)
                         continue;
                     else if (ret == 0)
@@ -244,6 +245,8 @@ int main(int argc, char **argv)
     double speed = finfo->filesize * 1.0 / 1024 / 1024 * 1000000 / diff;
 
     printf("speed is  %.2lfM/s\n", speed);
+    free(pktl);
+    free(file_buffer);
     close(sockfd);
     close(fd);
     return 0;
